@@ -1,0 +1,11 @@
+# built flashable images are published as GitHub Release assets
+out/
+*.zip
+*.tar.*
+*.rpm
+*.log
+
+# build leftovers
+build/tmp/
+tmp/
+*.o

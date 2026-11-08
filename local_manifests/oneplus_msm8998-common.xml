@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+
+    <!-- Linux kernel 4.4 (Android 9) with linux-stable merged in -->
+    <project path="kernel/oneplus/msm8998"
+             name="sailfishos-oneplus5/android_kernel_oneplus_msm8998"
+             revision="lineage-16.0" />
+
+    <!-- Shared device tree for OnePlus 5 / 5T -->
+    <project path="device/oneplus/msm8998-common"
+             name="sailfishos-oneplus5/android_device_oneplus_msm8998-common"
+             revision="lineage-16.0" />
+
+    <!-- Proprietary blobs (msm8998) -->
+    <project path="vendor/oneplus"
+             name="sailfishos-oneplus5/proprietary_vendor_oneplus-msm8998"
+             revision="lineage-16.0" />
+
+    <!-- Forked hybris-boot with the misc fixes needed by OP5/5T -->
+    <remove-project path="hybris/hybris-boot" name="mer-hybris/hybris-boot" />
+    <project path="hybris/hybris-boot"
+             name="sailfishos-oneplus5/hybris-boot"
+             revision="custom" />
+
+    <!-- For "make libbiometry_fp_api" before building the SFOS RPMs -->
+    <project path="hybris/mw/sailfish-fpd-community-localbuild"
+             name="piggz/sailfish-fpd-community"
+             revision="master" />
+
+    <!-- Custom hybris installer (recovery flashable zip) -->
+    <project path="hybris/hybris-installer"
+             name="sailfishos-oneplus5/hybris-installer"
+             revision="master" />
+
+</manifest>

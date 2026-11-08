@@ -1,0 +1,45 @@
+# Minimal mihomo (Clash.Meta) config for Sailfish OS
+# Full reference: https://wiki.metacubex.one/config/
+#
+# Default mode: local proxy (no root / no tun).
+# Apps that support a proxy can use 127.0.0.1:7890 (mixed) or 7891 (socks).
+#
+# To route ALL traffic through mihomo, enable the tun section below
+# (requires the mihomo service, CAP_NET_ADMIN is already set in the unit).
+
+mixed-port: 7890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: true
+external-controller: 127.0.0.1:9090
+# secret: ""
+
+dns:
+  enable: true
+  ipv6: true
+  listen: 127.0.0.1:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - 1.1.1.1
+    - 8.8.8.8
+
+# tun:
+#   enable: false
+#   stack: gvisor
+#   device: mihomo0
+#   auto-route: true
+#   auto-detect-interface: true
+#   dns-hijack:
+#     - any:53
+#   mtu: 9000
+
+proxies: []
+proxy-groups: []
+rules:
+  - MATCH,DIRECT

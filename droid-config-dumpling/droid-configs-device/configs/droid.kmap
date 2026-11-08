@@ -1,0 +1,37 @@
+keycode 100 = AltGr
+keycode 353 = Select
+keycode 114 = VolumeDown
+keycode 115 = VolumeUp
+keycode 139 = MenuKB
+keycode 158 = Back
+keycode 163 = MediaNext
+keycode 164 = MediaTogglePlayPause
+keycode 165 = MediaPrevious
+keycode 166 = MediaStop
+keycode 168 = AudioRewind
+keycode 169 = Call
+keycode 172 = HomePage
+keycode 200 = MediaPlay
+keycode 201 = MediaPause
+keycode 208 = AudioForward
+# Depending on the device headset can give either
+# KEY_MEDIA or BTN_MISC so lets map both to ToggleCallHangup
+# KEY_MEDIA
+keycode 226 = ToggleCallHangup
+# BTN_MISC
+keycode 256 = ToggleCallHangup
+keycode 528 = CameraFocus
+keycode 766 = Camera
+# custom assistant button on at least Sony Xperia 10 III
+keycode 457 = Camera
+# 12-key keypad (Callback): * and #, KEY_NUMERIC_STAR and KEY_NUMERIC_POUND
+keycode 522 = asterisk
+keycode 523 = numbersign
+# Keypad function keys F21..F24 (191-194). Without these lines lipstick's evdev
+# plugin drops them before the xkb keymap runs. The matching keysyms come from
+# xkeyboard-config's jolla:fnkeys option, which binds F22 to XF86HomePage for
+# the launcher key.
+keycode 191 = F21
+keycode 192 = HomePage
+keycode 193 = F23
+keycode 194 = F24

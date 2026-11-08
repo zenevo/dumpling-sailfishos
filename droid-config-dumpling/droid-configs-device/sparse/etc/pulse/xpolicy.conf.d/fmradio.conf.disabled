@@ -1,0 +1,26 @@
+# To enable PulseAudio fmradio device configuration make a symlink from
+# this file to fmradio.conf in sparse/etc/pulse/xpolicy.conf.d
+# If input fm port is different from default add
+# sparse/etc/pulse/xpolicy.conf.d/xvars.conf with input port name
+# used in your device.
+
+[device]
+type  = fmradio
+source= $input_fm@equals:$input_equals
+ports = $input_fm@equals:$input_equals->$source_input_fmradio
+flags = refresh_always
+
+[device]
+type  = fmradioloopback
+source= $input_fm@equals:$input_equals
+ports = $input_fm@equals:$input_equals->$source_input_fmradio
+module= module-loopback@$fm_loopback_args
+flags = refresh_always, module_unload_immediately
+
+[stream]
+property = media.name@equals:"fmradio-loopback"
+group    = player
+
+[stream]
+property = media.name@equals:"fmradio-loopback-source"
+group    = player

@@ -1,0 +1,21 @@
+[Unit]
+Description=Mihomo (Clash.Meta) proxy core
+Documentation=https://wiki.metacubex.one/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mihomo -d /etc/mihomo
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=1000000
+# tun mode needs NET_ADMIN; binding low ports / DNS needs the others
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+# mihomo writes its cache/geo files under -d /etc/mihomo
+ReadWritePaths=/etc/mihomo
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
