@@ -151,8 +151,7 @@ make hybris-hal
 ├── local_manifests/                # repo 清单（lineage + oneplus msm8998 common）
 ├── droid-hal-dumpling/             # droid-hal 打包
 ├── droid-config-dumpling/          # droid-config 打包
-├── droid-hal-version-dumpling/     # droid-hal-version 打包
-└── mihomo-sailfish/                # mihomo 客户端打包（rpm/systemd/config）
+└── droid-hal-version-dumpling/     # droid-hal-version 打包
 ```
 
 ---
@@ -202,7 +201,6 @@ make hybris-hal
 - [connman](https://01.org/connman)
 - [Storeman](https://github.com/mentaljam/harbour-storeman)（`GPL-3.0`）—— 可选
 - [Xray-core](https://github.com/XTLS/Xray-core)（`MPL-2.0`）—— 可选
-- [mihomo](https://github.com/MetaCubeX/mihomo)（`GPL-3.0`）—— 可选
 
 ### 文档 / 社区
 
@@ -232,7 +230,6 @@ make hybris-hal
 | GStreamer | LGPL-2.0-or-later |
 | Storeman | GPL-3.0 |
 | Xray-core | MPL-2.0 |
-| mihomo | GPL-3.0 |
 
 完整许可证文本请见各上游仓库。
 
