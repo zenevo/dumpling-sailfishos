@@ -116,6 +116,23 @@ Format Data
 
 ---
 
+## 预装应用：CPU Mode
+
+本仓库构建的每个镜像都内置 **CPU Mode** —— 一个针对骁龙 835 大小核架构
+（4 × Cortex-A53「小核」+ 4 × Cortex-A73「大核」）的原生 Sailfish 小应用。
+
+| 功能 | 说明 |
+|---|---|
+| 三种模式 | **省电**（限制频率，优先续航）· **均衡**（默认；interactive 调度，小核保持在 1.2 GHz 以上）· **性能**（全核解锁） |
+| 实时曲线 | 小核 / 大核各 60 个采样点的滚动频率图，每 500 ms 采样一次 |
+| 读数 | 当前小核 / 大核频率（MHz）以及各模式的频率上限 |
+| 开机保持 | 选择的模式保存在 `~/.config/cpu-mode/mode`，开机时由 `cpu-mode.service`（通过 `cpu-mode.path` 触发）重新应用 |
+| 相关文件 | `/usr/bin/cpu-mode`、`/usr/bin/cpu-mode-apply`、`/usr/share/cpu-mode/qml/`、`/usr/lib/systemd/system/cpu-mode.{path,service}` |
+
+同时预装了 `lscpu`，`/usr/bin/lscpu` 可直接使用。
+
+---
+
 ## 自行构建
 
 本移植用 [Sailfish OS HADK](https://docs.sailfishos.org/Tools/HADK/)

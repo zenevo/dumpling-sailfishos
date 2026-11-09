@@ -124,6 +124,24 @@ The full bring-up log, debugging notes and build scripts are in
 
 ---
 
+## Pre-installed: CPU Mode
+
+Every image built from this repository ships **CPU Mode**, a small native
+Sailfish app for the Snapdragon 835's asymmetric CPU (4 × Cortex-A53 "little"
++ 4 × Cortex-A73 "big" cores).
+
+| Feature | Detail |
+|---|---|
+| Profiles | **Powersave** (frequencies capped, battery first) · **Balanced** (default; interactive governor, small cores kept above 1.2 GHz) · **Performance** (all cores unlocked) |
+| Live chart | 60-sample rolling frequency graph for the little and big clusters, sampled every 500 ms |
+| Readout | current little/big frequency in MHz plus the per-profile frequency limits |
+| Persistence | the chosen profile is stored in `~/.config/cpu-mode/mode` and re-applied at boot by `cpu-mode.service` (triggered through `cpu-mode.path`) |
+| Files | `/usr/bin/cpu-mode`, `/usr/bin/cpu-mode-apply`, `/usr/share/cpu-mode/qml/`, `/usr/lib/systemd/system/cpu-mode.{path,service}` |
+
+`lscpu` is installed as well, so `/usr/bin/lscpu` works out of the box.
+
+---
+
 ## Building
 
 The port is built with the
