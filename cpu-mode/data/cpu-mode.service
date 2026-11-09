@@ -1,0 +1,6 @@
+[Unit]
+Description=Apply CPU mode
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/cpu-mode-apply

@@ -140,6 +140,9 @@ Sailfish app for the Snapdragon 835's asymmetric CPU (4 × Cortex-A53 "little"
 
 `lscpu` is installed as well, so `/usr/bin/lscpu` works out of the box.
 
+The application source (C++ backend, Silica QML, systemd units and the RPM spec)
+is in [`cpu-mode/`](cpu-mode).
+
 ---
 
 ## Building

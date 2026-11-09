@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for CPU mode change requests
+
+[Path]
+PathChanged=/home/defaultuser/.config/cpu-mode/mode
+PathExists=/home/defaultuser/.config/cpu-mode/mode
+Unit=cpu-mode.service
+
+[Install]
+WantedBy=multi-user.target

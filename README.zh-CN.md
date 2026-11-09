@@ -131,6 +131,8 @@ Format Data
 
 同时预装了 `lscpu`，`/usr/bin/lscpu` 可直接使用。
 
+应用源码（C++ 后端、Silica QML、systemd unit 和 RPM spec）见 [`cpu-mode/`](cpu-mode)。
+
 ---
 
 ## 自行构建
