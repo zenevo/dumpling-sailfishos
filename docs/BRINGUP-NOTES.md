@@ -799,3 +799,82 @@ glibc 进程里加载失败（相机 App 里表现为 camerabin 退回 `fake-aut
 
 > **gst-droid = 源码（GitHub）+ droidmedia-devel（手机 zypper 拿）+ `hybris.c` 编进插件 + 本地 mb2 构建。**
 > 不需要 OBS 账号，也不需要 Jolla 的构建环境。
+
+---
+
+## 14. 蜂窝：注册失败与 VoLTE 排查（2026-11-09）
+
+### 14.1 症状
+
+插入联通 SIM（4G 主卡槽）：SIM 能读（IMSI/ICCID 正常），但
+
+```
+NetworkRegistration.Status = "searching"
+NetworkRegistration.Name   = ""
+NetworkRegistration.Scan   → 超时 / MODEM_ERR
+ofonod: Failed to retrive the list of operators: MODEM_ERR
+ofonod: data reg changed 2 -> 0 (unregistered), attached 0
+```
+
+### 14.2 排查过的项（都正常）
+
+| 检查 | 结果 |
+|---|---|
+| modem 子系统 `subsys6` | ONLINE，`crash_count=0` |
+| 基带固件 | `MPSS.AT.2.0.c4.7-00070-8998_GEN_PACK-…`，`/vendor/firmware_mnt/image/` 352 个文件 |
+| `ver_info.txt` | `LA.UM.7.4.r1-03600-8x98.0-1`（Android 9 那套） |
+| IMEI（`Modem.Serial`） | 有效 |
+| EFS `modemst1/modemst2` | 有 `IMGEFS1` 魔数 |
+| `fsg` 分区 | **全 0 —— 但 LineageOS 下也全 0，属正常状态** |
+| SIM | `Present=true`，MCC 460 / MNC 01 |
+| 射频开关 | `mce = 7`，`Powered=true` |
+| ofono 版本 | 1.29+git13（Jolla），与 10/30–11/07 所有镜像**完全一致**（md5 相同） |
+
+### 14.3 有效的修复
+
+**先用 LineageOS 16 引导一次，再重刷 SFOS 镜像**，注册即恢复正常：
+
+```
+Status = registered
+Name   = CHN-UNICOM
+Technology = lte
+Strength   = 64~74
+数据连接正常
+```
+
+推测：Android 首次启动会把 modem 的 NV/EFS 和 QMI 状态完整初始化一遍，SFOS 的
+hybris-boot 直接冷启动时 modem 没有走完这套初始化。
+
+### 14.4 VoLTE 为什么做不了
+
+LineageOS 下同一张卡 + VoLTE 正常，说明硬件和运营商侧没问题。SFOS 缺的是 IMS 栈：
+
+| 条件 | 状态 |
+|---|---|
+| vendor IMS 守护进程（`imsqmidaemon` / `imsdatadaemon` / `imsrcsd` / `ims_rtp_daemon`） | ✅ 在跑 |
+| `ims` APN 上下文（`/ril_0/context3`） | ✅ 已配置 |
+| oFono 的 IMS 客户端 | ❌ ofono 1.29 无 IMS 插件 |
+| **vendor 的 IMS HAL**（`android.hardware.radio.ims` / `vendor.qti.hardware.radio.ims`） | ❌ Android 9 vendor **没有** |
+
+试过按 VerdandiTeam/miami（Android 13）的做法安装：
+
+```sh
+zypper in ofono-binder-plugin-ext-qti        # 提供 qtibinderpluginext.so + binder.d/qti.conf
+```
+
+插件确实包含 QTI IMS 实现（符号 `binder_ext_ims_*`、`QtiIms`、`qti-ims-get-state`），
+但 `/ril_0` 上**没有出现任何 IMS 接口** —— 因为它要驱动的 IMS HAL 在这套 Android 9
+vendor 里不存在（Android 9 的 IMS 跑在 Android framework 内部）。插件已卸载。
+
+**结论**：在 Android 9 底包上无法支持 VoLTE；要做必须把底包升到 Android 11+（重做
+内核/HAL/vendor/hybris 兼容层）。在 LTE-only 网络（如已关停 2G/3G 的中国联通）下，
+通话与短信因此不可用；有 2G/3G 覆盖的地方仍可回落通话。
+
+### 14.5 运维注意
+
+- **不要连续多次 `systemctl restart ofono`** —— 会让 `SimManager.Present` 变成 `false`
+  （SIM 丢失），重启手机才能恢复；
+- 切换 `TechnologyPreference`（如强制 `gsm`）会断开数据连接，且切回 `any` 后**不会自动
+  重新 Attach**，建议改完直接重启；
+- 排查时用 `dbus-send --system --dest=org.ofono /ril_0 org.ofono.NetworkRegistration.GetProperties`，
+  比看 UI 快。

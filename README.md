@@ -31,7 +31,7 @@ base layer.
 | Touch / display (1080 × 2160) | ✅ |
 | Wi-Fi | ✅ |
 | Mobile data (LTE) | ✅ |
-| Calls / SMS | ⚠️ untested — no VoLTE (no IMS stack in the port) |
+| Calls / SMS | ❌ not usable on LTE-only networks — needs VoLTE, see below |
 | Bluetooth | ⚠️ untested |
 | Audio playback | ✅ |
 | GPS | ⚠️ untested |
@@ -187,7 +187,18 @@ packages:
   moving scenes. This port caps video capture at 1920×1080 (see
   `CaptureView.qml` `_pickResolution()`); 4K can be re-enabled by removing the
   `maxPixels` cap, at the cost of the blockiness.
-- **No VoLTE** — no IMS stack; calls fall back to 2G/3G where available.
+- **No VoLTE — calls and SMS do not work on LTE-only networks.** The modem and its
+  IMS daemons (`imsqmidaemon`, `imsdatadaemon`, `imsrcsd`, `ims_rtp_daemon`) run,
+  and the port provisions an `ims` APN, but ofono 1.29 has **no IMS client** and
+  the Android 9 vendor has **no IMS HAL** (`android.hardware.radio.ims` /
+  `vendor.qti.hardware.radio.ims`) for one to drive — on Android 9 IMS lives
+  inside the Android framework. The `ofono-binder-plugin-ext-qti` extension used
+  by newer ports (e.g. VerdandiTeam/miami on Android 13) installs and loads, but
+  has nothing to talk to here. Calls therefore fail after ~30 s on LTE-only
+  networks; a 2G/3G fallback only works where those networks still exist.
+  Supporting VoLTE would require rebasing the port on an Android 11+ vendor.
+- **ofono loses the SIM after repeated restarts** — `systemctl restart ofono` a
+  few times in a row can leave `SimManager.Present = false`. A reboot restores it.
 - **USB `idVendor` reports `0000`** — cosmetic on Linux, may confuse Windows
   driver matching.
 - **`iproute2` is not installed** in the rootfs (`ip` is missing); use

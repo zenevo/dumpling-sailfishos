@@ -28,7 +28,7 @@
 | 触摸 / 显示（1080 × 2160） | ✅ |
 | Wi-Fi | ✅ |
 | 移动数据（LTE） | ✅ |
-| 通话 / 短信 | ⚠️ 未测试 —— 无 VoLTE（移植里没有 IMS 协议栈） |
+| 通话 / 短信 | ❌ LTE-only 网络下不可用 —— 需要 VoLTE，详见下文 |
 | 蓝牙 | ⚠️ 未测试 |
 | 音频播放 | ✅ |
 | GPS | ⚠️ 未测试 |
@@ -180,7 +180,16 @@ make hybris-hal
 - **4K 录像画质** —— 相机默认会选 3840×2160，但编码器只输出约 11.6 Mbps 的 H.264 Baseline，
   运动画面方块化严重。本移植把录像限制在 1920×1080（见 `CaptureView.qml` 的 `_pickResolution()`）；
   去掉 `maxPixels` 限制即可恢复 4K，代价是画质下降。
-- **无 VoLTE** —— 没有 IMS 协议栈，通话在可用时回落到 2G/3G。
+- **无 VoLTE —— 在 LTE-only 网络下无法通话和收发短信。** modem 和它的 IMS 守护进程
+  （`imsqmidaemon`、`imsdatadaemon`、`imsrcsd`、`ims_rtp_daemon`）都在跑，移植也配置了
+  `ims` APN，但 **oFono 1.29 没有 IMS 客户端**，而 Android 9 的 vendor **没有 IMS HAL**
+  （`android.hardware.radio.ims` / `vendor.qti.hardware.radio.ims`）可供驱动 —— Android 9 的
+  IMS 是跑在 Android framework 内部的。新版移植（如 Android 13 上的 VerdandiTeam/miami）
+  使用的 `ofono-binder-plugin-ext-qti` 扩展在这里能装、能加载，但没有对接对象。
+  因此 LTE-only 网络下通话约 30 秒后失败；只有在仍有 2G/3G 覆盖的地方才能回落通话。
+  要支持 VoLTE，必须把移植的 Android 底包升级到 **Android 11+**。
+- **oFono 连续重启几次后会丢 SIM** —— 连续 `systemctl restart ofono` 可能导致
+  `SimManager.Present = false`，重启手机即可恢复。
 - **USB `idVendor` 显示 `0000`** —— Linux 下只是观感问题，Windows 驱动匹配可能受影响。
 - **rootfs 里没有 `iproute2`**（`ip` 命令缺失）；可用 `/proc/net/*`，或通过 `zypper` 安装。
 - **录像按钮延迟** —— 相机 HAL 重新配置视频流时约有 1 秒延迟。
