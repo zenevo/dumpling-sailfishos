@@ -1,0 +1,114 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+"""Narrow qcacld GETROAMMODE/SETROAMMODE control; default is read-only.
+
+ABI: hdd_priv_data_t in wlan_hdd_main.h and SIOCDEVPRIVATE + 1 in
+wlan_hdd_ioctl.c, sailfishos-oneplus5/android_kernel_oneplus_msm8998,
+lineage-16.0. Driver mode 0 enables LFR; mode 1 disables LFR and roam scans.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ctypes
+import errno
+import fcntl
+import os
+from pathlib import Path
+import socket
+import struct
+import sys
+
+
+INTERFACE = b"wlan0"
+
+
+class PrivateCommand(ctypes.Structure):
+    _fields_ = [
+        ("buf", ctypes.c_void_p),
+        ("used_len", ctypes.c_int),
+        ("total_len", ctypes.c_int),
+    ]
+
+
+def driver_command(command: bytes) -> bytes:
+    if command not in (b"GETROAMMODE", b"SETROAMMODE 0", b"SETROAMMODE 1"):
+        raise ValueError("Unsupported driver command")
+    pointer_size = struct.calcsize("P")
+    if pointer_size not in (4, 8) or ctypes.sizeof(ctypes.c_int) != 4:
+        raise RuntimeError("Unsupported native ioctl ABI")
+    buffer = ctypes.create_string_buffer(command, 128)
+    private = PrivateCommand(ctypes.addressof(buffer), 0, ctypes.sizeof(buffer))
+    request = bytearray(40 if pointer_size == 8 else 32)
+    struct.pack_into("@16sP", request, 0, INTERFACE, ctypes.addressof(private))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as channel:
+        fcntl.ioctl(channel.fileno(), 0x89F1, request, True)
+    return buffer.value
+
+
+def get_mode() -> int:
+    reply = driver_command(b"GETROAMMODE")
+    if reply not in (b"GETROAMMODE 0", b"GETROAMMODE 1"):
+        raise RuntimeError(f"Unexpected GETROAMMODE reply: {reply!r}")
+    return int(reply[-1:])
+
+
+def set_mode(mode: int) -> bool:
+    """Change only when needed and verify the readback; undo on failure."""
+    if mode not in (0, 1):
+        raise ValueError("RoamMode must be 0 or 1")
+    before = get_mode()
+    if before == mode:
+        return False
+    try:
+        driver_command(f"SETROAMMODE {mode}".encode())
+        if get_mode() != mode:
+            raise RuntimeError("RoamMode readback did not match the request")
+    except (OSError, RuntimeError):
+        try:
+            driver_command(f"SETROAMMODE {before}".encode())
+        except OSError as error:
+            print(f"Could not restore RoamMode {before}: {error}", file=sys.stderr)
+        raise
+    print(f"RoamMode {before} -> {mode}; readback verified")
+    return True
+
+
+def interface_up() -> bool:
+    try:
+        flags = int(Path("/sys/class/net/wlan0/flags").read_text().strip(), 16)
+    except FileNotFoundError:
+        return False
+    return bool(flags & 1)  # IFF_UP, not association/carrier state.
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--query", action="store_true", help="print 0 (enabled) or 1 (disabled)")
+    actions.add_argument("--disable", action="store_true", help="disable LFR and verify")
+    actions.add_argument("--ensure-disabled", action="store_true", help="timer action; skip an inactive interface")
+    actions.add_argument("--restore-mode", choices=("0", "1"), help="restore a previously recorded driver mode")
+    args = parser.parse_args()
+    try:
+        if args.disable or args.ensure_disabled or args.restore_mode is not None:
+            if os.geteuid() != 0:
+                raise PermissionError("RoamMode changes require root")
+            if args.ensure_disabled and not interface_up():
+                return 0
+            set_mode(int(args.restore_mode) if args.restore_mode is not None else 1)
+        else:
+            print(get_mode())
+    except OSError as error:
+        if args.ensure_disabled and error.errno in (errno.ENODEV, errno.ENETDOWN, errno.EAGAIN):
+            return 0
+        print(f"Wi-Fi roaming control failed: {error}", file=sys.stderr)
+        return 1
+    except (RuntimeError, ValueError) as error:
+        print(f"Wi-Fi roaming control failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

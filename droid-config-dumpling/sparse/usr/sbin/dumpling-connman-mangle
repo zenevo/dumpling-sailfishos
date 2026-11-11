@@ -1,0 +1,61 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# ConnMan 1.40's internal chain deletion can leave invalid jump offsets when
+# its IPv6 mangle chain precedes vendor chains. Use ip6tables for the handover.
+# Only the known, single-rule ConnMan rpfilter chain is removed; the same
+# protection stays active as a temporary direct rule until ConnMan is ready.
+
+set -eu
+export LC_ALL=C
+
+native() { ip6tables -w 5 -t mangle "$1" connman-PREROUTING -m rpfilter --invert -j DROP; }
+handover() { ip6tables -w 5 -t mangle "$1" PREROUTING -m rpfilter --invert -m comment --comment dumpling-connman-mangle-handover -j DROP; }
+
+case "${1---check}" in
+    --check)
+        ip6tables -w 5 -t mangle -S
+        ;;
+    --prepare)
+        # ExecStartPre runs after the old daemon has stopped, avoiding its
+        # in-process table cache racing with these legacy ip6tables commands.
+        if rules=$(ip6tables -w 5 -t mangle -S connman-PREROUTING 2>/dev/null); then
+            if printf '%s\n' "$rules" | grep -Ev '^-N connman-PREROUTING$|^-A connman-PREROUTING -m rpfilter --invert -j DROP$'; then
+                logger -t dumpling-connman-mangle 'Unexpected rules in ConnMan mangle chain; handover aborted'
+                exit 1
+            fi
+            refs=$(ip6tables -w 5 -t mangle -S | grep -- '-[jg] connman-PREROUTING' || :)
+            if [ -n "$refs" ] && printf '%s\n' "$refs" | grep -Ev '^-A PREROUTING -j connman-PREROUTING$'; then
+                logger -t dumpling-connman-mangle 'Unexpected reference to ConnMan mangle chain; handover aborted'
+                exit 1
+            fi
+        else
+            rules=
+        fi
+        handover -C 2>/dev/null || handover -I
+        if [ -n "$rules" ]; then
+            while ip6tables -w 5 -t mangle -C PREROUTING -j connman-PREROUTING 2>/dev/null; do
+                ip6tables -w 5 -t mangle -D PREROUTING -j connman-PREROUTING
+            done
+            ip6tables -w 5 -t mangle -F connman-PREROUTING
+            ip6tables -w 5 -t mangle -X connman-PREROUTING
+        fi
+        ;;
+    --finish)
+        # Type=dbus is reported active before firewall initialization finishes.
+        attempt=0
+        while [ "$attempt" -lt 20 ]; do
+            if native -C 2>/dev/null &&
+                iptables -w 5 -S INPUT | grep -Fxq -- '-P INPUT DROP' &&
+                ip6tables -w 5 -S INPUT | grep -Fxq -- '-P INPUT DROP'; then
+                while handover -C 2>/dev/null; do handover -D; done
+                logger -t dumpling-connman-mangle 'Native IPv6 rpfilter and DROP policies restored'
+                exit 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+        done
+        # Keep the protection and the network daemon available for diagnosis.
+        logger -t dumpling-connman-mangle 'Native firewall not ready; retained temporary rpfilter rule'
+        ;;
+    *) printf 'Usage: dumpling-connman-mangle [--check|--prepare|--finish]\n' >&2; exit 2 ;;
+esac

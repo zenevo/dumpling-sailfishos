@@ -38,9 +38,32 @@ base layer.
 | Camera (photos) | ✅ |
 | Camera (video recording) | ✅ 1080p (4K capped — see Known issues) |
 | Video playback (Gallery) | ✅ |
-| USB developer mode / SSH | ✅ |
+| USB developer mode / SSH | ✅ stable since 2026-11-11 (see the network fixes below) |
+| SSH over Wi-Fi | ✅ stable since 2026-11-11 (Qualcomm LFR disabled) |
 | Storeman / OpenRepos | ✅ |
 | Browser (Gecko) | ✅ |
+
+### Changelog
+
+**2026-11-11** — network/SSH stability release:
+
+- **SSH over USB** now works out of the box: ConnMan allows TCP/22 and DHCP
+  (UDP 68 → 67) on `usb0`. The previous image relied on a firewall timer that
+  never actually fired.
+- **SSH listener race** fixed: `sshd.socket` and a standalone `sshd.service`
+  are now ordered from both sides (systemd 238 does not order `Conflicts=`
+  alone), plus a small watchdog that only recovers an *enabled but inactive*
+  socket.
+- **IPv6 firewall hole** fixed: ConnMan's mangle-table rebuild failure
+  (`Failed to flush table 'mangle'`) no longer loses the rpfilter rule or
+  flips `INPUT` to `ACCEPT`.
+- **Wi-Fi drops** mitigated: Qualcomm LFR fast roaming is disabled by a small
+  ioctl helper and re-applied by a timer after driver/supplicant resets.
+- Corrected the VoLTE section: the Android 9 vendor **does** expose
+  `vendor.qti.hardware.radio.ims@1.0` services; VoLTE is still not working, but
+  the reason is the oFono backend, not a missing IMS HAL.
+
+Details: [`docs/NETWORK-FIXES.md`](docs/NETWORK-FIXES.md).
 
 ---
 
@@ -62,7 +85,7 @@ The image is attached to the **Releases** of this repository:
 
 | File | Size | MD5 |
 |---|---|---|
-| `sailfishos-5.2.0.22-20261107-dumpling.zip` | 712 MB | `38e8557369ade28d0a8f491afbb8180e` |
+| `sailfishos-5.2.0.22-20261111-dumpling.zip` | 746 MB | `948e70206ee32d542e0ce6b405a5d0da` |
 
 This image is the plain port (no extra pre-installed applications), built from
 the sources in this repository with the device fixes described below.
@@ -117,6 +140,29 @@ This port differs from a plain HADK build in a few device-specific ways:
 | **USB developer mode** — the default `usb-moded` "ask" mode re-enumerates the USB gadget on screen-lock, breaking RNDIS/SSH. The port uses a persistent developer mode. | `/etc/usb-moded/70-use-developer-mode.ini` |
 | **Networking** — static `/etc/resolv.conf` (the systemd-resolved stub does not work on this kernel) and `/etc/gai.conf` preferring IPv4 (no global IPv6 on most networks). | Sailfish rootfs |
 | **Browser** — `gfx.webrender.compositor=false` in `/usr/share/sailfish-browser/data/prefs.js`; without it Gecko WebRender shows a black page on this libhybris stack. | Sailfish rootfs |
+| **USB SSH + DHCP** — ConnMan allows TCP/22 and the DHCP server request (UDP 68 → 67) on `usb0` only. | `/etc/connman/firewall.d/20-usb0-ssh-dhcp-firewall.conf` |
+| **SSH listener handover** — `sshd.socket` and `sshd.service` are ordered from both sides, so the standalone server can no longer bind before the socket closes. | `/etc/systemd/system/sshd.{socket,service}.d/` |
+| **SSH watchdog** — recovers an enabled `sshd.socket` that is not listening, without killing established sessions. | `/usr/sbin/dumpling-sshd-watchdog`, `sshd-watchdog.{service,timer}` |
+| **IPv6 firewall / ConnMan mangle** — native `ip6tables` hand-over keeps the rpfilter rule (and `INPUT DROP`) while ConnMan rebuilds its tables. | `/usr/sbin/dumpling-connman-mangle` |
+| **Wi-Fi roaming drops** — Qualcomm LFR (fast roaming) is disabled through the driver ioctl and re-applied every ~30 s. | `/usr/sbin/dumpling-wifi-roam`, `dumpling-wifi-stability.{service,timer}` |
+
+### SSH / USB / Wi-Fi stability fixes (2026-11-11)
+
+The 2026-11-11 image also ships the fixes for three faults that made SSH look
+broken, plus an IPv6 firewall hole found while validating them:
+
+| Fix | Effect |
+|---|---|
+| ConnMan rule for `usb0` (TCP/22 + DHCP 68 → 67) | plug in USB, get a DHCP lease and log in with `ssh defaultuser@192.168.2.15` — no manual `iptables`, no dependency on the old timer that never fired |
+| Symmetric `sshd.socket` / `sshd.service` ordering | the standalone server can no longer grab port 22 before the socket is released (systemd 238 does not order `Conflicts=`) |
+| `dumpling-sshd-watchdog` timer | recovers an *enabled but inactive* socket without interrupting established sessions |
+| `dumpling-connman-mangle` | keeps the IPv6 rpfilter rule and `INPUT DROP` while ConnMan rebuilds its mangle table |
+| `dumpling-wifi-roam` + timer | disables Qualcomm LFR fast roaming and re-applies it after driver/supplicant resets, so failed hand-offs no longer drop the link |
+
+Verified on the device: USB DHCP + SSH + `devel-su`, rule rebuild after a
+ConnMan restart, socket↔standalone switching with `NRestarts=0`, and a 600 s
+screen-off Wi-Fi session with no new LFR3 failures. Full write-up, trade-offs
+and how to disable each part: [`docs/NETWORK-FIXES.md`](docs/NETWORK-FIXES.md).
 
 The full bring-up log, debugging notes and build scripts are in
 [`docs/BRINGUP-NOTES.md`](docs/BRINGUP-NOTES.md) (Chinese), and the flashing steps in
@@ -171,7 +217,10 @@ packages:
 .
 ├── README.md                  # this file
 ├── docs/
-│   └── BRINGUP-NOTES.md       # detailed bring-up / debugging notes (CN)
+│   ├── BRINGUP-NOTES.md       # detailed bring-up / debugging notes (CN)
+│   ├── NETWORK-FIXES.md       # SSH / USB / Wi-Fi fix write-up
+│   ├── VOLTE-NOTES.md         # VoLTE investigation notes
+│   └── FLASHING.md            # flashing walkthrough
 ├── out/                       # pre-built flashable images (not committed)
 ├── droid-hal/                 # droid-hal packaging
 ├── droid-config/              # droid-config packaging
@@ -187,22 +236,28 @@ packages:
   moving scenes. This port caps video capture at 1920×1080 (see
   `CaptureView.qml` `_pickResolution()`); 4K can be re-enabled by removing the
   `maxPixels` cap, at the cost of the blockiness.
-- **No VoLTE — calls and SMS do not work on LTE-only networks.** The modem and its
-  IMS daemons (`imsqmidaemon`, `imsdatadaemon`, `imsrcsd`, `ims_rtp_daemon`) run,
-  and the port provisions an `ims` APN, but ofono 1.29 has **no IMS client** and
-  the Android 9 vendor has **no IMS HAL** (`android.hardware.radio.ims` /
-  `vendor.qti.hardware.radio.ims`) for one to drive — on Android 9 IMS lives
-  inside the Android framework. The `ofono-binder-plugin-ext-qti` extension used
-  by newer ports (e.g. VerdandiTeam/miami on Android 13) installs and loads, but
-  has nothing to talk to here. Calls therefore fail after ~30 s on LTE-only
-  networks; a 2G/3G fallback only works where those networks still exist.
-  Supporting VoLTE would require rebasing the port on an Android 11+ vendor.
+- **No VoLTE yet — calls and SMS do not work on LTE-only networks.** The modem,
+  its IMS daemons and the `ims` APN are in place, and the Android 9 vendor **does**
+  register QTI `vendor.qti.hardware.radio.ims@1.0` services (`imsradio0`/`imsradio1`
+  show up in `lshal -i`), so "Android 9 has no IMS HAL" is *not* the reason. The
+  port uses the legacy `ofono-ril-plugin` + `ofono-ril-binder-plugin` chain, which
+  cannot drive the QTI IMS service; the direct `ofono-binder-plugin` + QTI
+  extension path needs a real IMS 1.0 adaptation (the existing extensions still
+  use 1.2 transactions for hangup and SMS). Calls fail after ~30 s on LTE-only
+  networks; a 2G/3G fallback works where those networks still exist.
+  See [`docs/VOLTE-NOTES.md`](docs/VOLTE-NOTES.md) for the evidence and the
+  candidate routes.
 - **ofono loses the SIM after repeated restarts** — `systemctl restart ofono` a
   few times in a row can leave `SimManager.Present = false`. A reboot restores it.
 - **USB `idVendor` reports `0000`** — cosmetic on Linux, may confuse Windows
   driver matching.
 - **`iproute2` is not installed** in the rootfs (`ip` is missing); use
   `/proc/net/*` or install it with `zypper`.
+- **Wi-Fi fast roaming is disabled by default** — the network fix turns off the
+  Qualcomm LFR fast-roaming engine to stop the link from dropping on a failed
+  hand-off. Roaming between APs is less seamless; re-enable it with
+  `systemctl disable --now dumpling-wifi-stability.timer` and
+  `/usr/sbin/dumpling-wifi-roam --restore-mode 0`.
 - **Record button delay** — ~1 s while the camera HAL reconfigures the video
   stream.
 

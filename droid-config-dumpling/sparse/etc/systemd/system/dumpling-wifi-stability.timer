@@ -1,0 +1,13 @@
+[Unit]
+Description=Reapply dumpling roaming mitigation after driver resets
+After=wpa_supplicant.service
+
+[Timer]
+OnActiveSec=5
+OnUnitInactiveSec=30
+AccuracySec=5
+WakeSystem=false
+Unit=dumpling-wifi-stability.service
+
+[Install]
+WantedBy=timers.target

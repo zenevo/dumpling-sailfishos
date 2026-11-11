@@ -35,9 +35,27 @@
 | 相机（拍照） | ✅ |
 | 相机（录像） | ✅ 1080p（4K 被限制，见「已知问题」） |
 | 视频播放（相册） | ✅ |
-| USB 开发者模式 / SSH | ✅ |
+| USB 开发者模式 / SSH | ✅ 2026-11-11 起稳定（见下文网络修复） |
+| Wi-Fi 下的 SSH | ✅ 2026-11-11 起稳定（已关闭高通 LFR） |
 | Storeman / OpenRepos | ✅ |
 | 浏览器（Gecko） | ✅ |
+
+### 更新记录
+
+**2026-11-11** —— 网络 / SSH 稳定性版本：
+
+- **USB 上的 SSH** 开箱可用：ConnMan 只对 `usb0` 放行 TCP/22 和 DHCP（UDP 68 → 67）。
+  上一版依赖的防火墙定时器实际上从未触发过。
+- **SSH 端口竞争**修复：`sshd.socket` 与独立 `sshd.service` 现在双向声明顺序
+  （systemd 238 只靠 `Conflicts=` 不会排序），另加一个只恢复「已启用但未监听」socket 的看门狗。
+- **IPv6 防火墙漏洞**修复：ConnMan 重建 mangle 表失败（`Failed to flush table 'mangle'`）
+  不再导致 rpfilter 规则丢失、`INPUT` 被 failsafe 改成 `ACCEPT`。
+- **Wi-Fi 掉线**缓解：通过驱动 ioctl 关闭高通 LFR 快速漫游，并由定时器在驱动 /
+  supplicant 重启后重新应用。
+- 修正 VoLTE 说明：Android 9 的 vendor **确实** 注册了
+  `vendor.qti.hardware.radio.ims@1.0` 服务，VoLTE 仍不可用，但原因不是缺 IMS HAL。
+
+细节见 [`docs/NETWORK-FIXES.md`](docs/NETWORK-FIXES.md)。
 
 ---
 
@@ -58,7 +76,7 @@
 
 | 文件 | 大小 | MD5 |
 |---|---|---|
-| `sailfishos-5.2.0.22-20261107-dumpling.zip` | 712 MB | `38e8557369ade28d0a8f491afbb8180e` |
+| `sailfishos-5.2.0.22-20261111-dumpling.zip` | 746 MB | `948e70206ee32d542e0ce6b405a5d0da` |
 
 这个镜像是**纯净版**（未预装额外应用），由本仓库源码构建，包含下文列出的设备修复。
 
@@ -110,6 +128,28 @@ Format Data
 | **USB 开发者模式** —— 默认的 `usb-moded`「询问」模式会在锁屏时重新枚举 USB gadget，导致 RNDIS / SSH 断连。本移植使用持久的开发者模式。 | `/etc/usb-moded/70-use-developer-mode.ini` |
 | **网络** —— 静态 `/etc/resolv.conf`（这个内核上 systemd-resolved 的 stub 不工作），以及优先 IPv4 的 `/etc/gai.conf`（多数网络没有全局 IPv6）。 | Sailfish rootfs |
 | **浏览器** —— `/usr/share/sailfish-browser/data/prefs.js` 里设置 `gfx.webrender.compositor=false`；否则在这套 libhybris 栈上 Gecko WebRender 会显示黑屏。 | Sailfish rootfs |
+| **USB SSH + DHCP** —— ConnMan 只对 `usb0` 放行 TCP/22 和 DHCP 服务端请求（UDP 68 → 67）。 | `/etc/connman/firewall.d/20-usb0-ssh-dhcp-firewall.conf` |
+| **SSH 监听交接** —— `sshd.socket` 与 `sshd.service` 双向声明顺序，独立服务不会再在 socket 释放前抢占 22 端口。 | `/etc/systemd/system/sshd.{socket,service}.d/` |
+| **SSH 看门狗** —— 只在 socket 已启用却未监听时拉起，不会打断已建立的会话。 | `/usr/sbin/dumpling-sshd-watchdog`、`sshd-watchdog.{service,timer}` |
+| **IPv6 防火墙 / ConnMan mangle** —— 用原生 `ip6tables` 交接 rpfilter 规则，ConnMan 重建表期间 `INPUT DROP` 不丢。 | `/usr/sbin/dumpling-connman-mangle` |
+| **Wi-Fi 漫游掉线** —— 通过驱动 ioctl 关闭高通 LFR 快速漫游，并每约 30 秒重新应用。 | `/usr/sbin/dumpling-wifi-roam`、`dumpling-wifi-stability.{service,timer}` |
+
+### SSH / USB / Wi-Fi 修复（2026-11-11）
+
+2026-11-11 的镜像同时带上了三个「看起来像 SSH 坏了」的故障修复，以及验证时发现的
+一个 IPv6 防火墙漏洞：
+
+| 修复 | 效果 |
+|---|---|
+| `usb0` 的 ConnMan 规则（TCP/22 + DHCP 68 → 67） | 插上 USB 就能拿到 DHCP 租约并 `ssh defaultuser@192.168.2.15`，不用手动 `iptables`，也不依赖那个从不触发的旧定时器 |
+| `sshd.socket` / `sshd.service` 双向顺序 | 独立服务不会再在 socket 释放前抢占 22 端口 |
+| `dumpling-sshd-watchdog` 定时器 | 只恢复「已启用但未监听」的 socket，不打断已建立的会话 |
+| `dumpling-connman-mangle` | ConnMan 重建 mangle 表期间保住 rpfilter 规则和 `INPUT DROP` |
+| `dumpling-wifi-roam` + 定时器 | 关闭高通 LFR 快速漫游并在驱动 / supplicant 重置后重新应用，漫游失败不再断链 |
+
+已在真机验证：USB DHCP + SSH + `devel-su`、ConnMan 重启后规则重建、
+socket ↔ 独立服务切换 `NRestarts=0`、600 秒熄屏 Wi-Fi 会话无新增 LFR3 失败。
+完整说明、取舍和逐项关闭方法见 [`docs/NETWORK-FIXES.md`](docs/NETWORK-FIXES.md)。
 
 完整的 bring-up 记录、调试笔记和构建脚本见
 [`docs/BRINGUP-NOTES.md`](docs/BRINGUP-NOTES.md)，刷机细节见 [`docs/FLASHING.md`](docs/FLASHING.md)。
@@ -165,6 +205,8 @@ make hybris-hal
 │   ├── BUILD-LOG.md                # 5.2.0.22 构建日志
 │   ├── DEVICE-PREP.md              # 真机准备清单
 │   ├── FLASHING.md                 # 刷入说明
+│   ├── NETWORK-FIXES.md            # SSH / USB / Wi-Fi 修复说明
+│   ├── VOLTE-NOTES.md              # VoLTE 调查笔记
 │   └── SPOTIFY-WAVE.md             # Wave（Spotify 客户端）打包说明
 ├── build/                          # kickstart
 ├── local_manifests/                # repo 清单（lineage + oneplus msm8998 common）
@@ -180,18 +222,22 @@ make hybris-hal
 - **4K 录像画质** —— 相机默认会选 3840×2160，但编码器只输出约 11.6 Mbps 的 H.264 Baseline，
   运动画面方块化严重。本移植把录像限制在 1920×1080（见 `CaptureView.qml` 的 `_pickResolution()`）；
   去掉 `maxPixels` 限制即可恢复 4K，代价是画质下降。
-- **无 VoLTE —— 在 LTE-only 网络下无法通话和收发短信。** modem 和它的 IMS 守护进程
-  （`imsqmidaemon`、`imsdatadaemon`、`imsrcsd`、`ims_rtp_daemon`）都在跑，移植也配置了
-  `ims` APN，但 **oFono 1.29 没有 IMS 客户端**，而 Android 9 的 vendor **没有 IMS HAL**
-  （`android.hardware.radio.ims` / `vendor.qti.hardware.radio.ims`）可供驱动 —— Android 9 的
-  IMS 是跑在 Android framework 内部的。新版移植（如 Android 13 上的 VerdandiTeam/miami）
-  使用的 `ofono-binder-plugin-ext-qti` 扩展在这里能装、能加载，但没有对接对象。
-  因此 LTE-only 网络下通话约 30 秒后失败；只有在仍有 2G/3G 覆盖的地方才能回落通话。
-  要支持 VoLTE，必须把移植的 Android 底包升级到 **Android 11+**。
+- **暂无 VoLTE —— 在 LTE-only 网络下无法通话和收发短信。** modem、IMS 守护进程和
+  `ims` APN 都在，而且 Android 9 的 vendor **确实**注册了
+  `vendor.qti.hardware.radio.ims@1.0` 服务（`lshal -i` 能看到 `imsradio0` / `imsradio1`），
+  所以「Android 9 没有 IMS HAL」**不是**原因。当前用的是旧链路
+  `ofono-ril-plugin` + `ofono-ril-binder-plugin`，它驱动不了 QTI IMS 服务；换到
+  `ofono-binder-plugin` + QTI 扩展还需要真正适配 IMS 1.0（现有扩展的挂断和短信仍走 1.2 事务）。
+  LTE-only 网络下通话约 30 秒后失败；仍有 2G/3G 覆盖的地方可以回落。
+  证据和候选路线见 [`docs/VOLTE-NOTES.md`](docs/VOLTE-NOTES.md)。
 - **oFono 连续重启几次后会丢 SIM** —— 连续 `systemctl restart ofono` 可能导致
   `SimManager.Present = false`，重启手机即可恢复。
 - **USB `idVendor` 显示 `0000`** —— Linux 下只是观感问题，Windows 驱动匹配可能受影响。
 - **rootfs 里没有 `iproute2`**（`ip` 命令缺失）；可用 `/proc/net/*`，或通过 `zypper` 安装。
+- **Wi-Fi 快速漫游默认关闭** —— 网络修复关掉了高通 LFR 快速漫游引擎，避免漫游失手时断链；
+  代价是跨 AP 切换不再那么无感。恢复方法：
+  `systemctl disable --now dumpling-wifi-stability.timer` 加
+  `/usr/sbin/dumpling-wifi-roam --restore-mode 0`。
 - **录像按钮延迟** —— 相机 HAL 重新配置视频流时约有 1 秒延迟。
 
 ---

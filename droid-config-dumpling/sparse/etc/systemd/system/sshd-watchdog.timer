@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically verify that the enabled sshd.socket is listening
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=30
+AccuracySec=5
+WakeSystem=false
+Unit=sshd-watchdog.service
+
+[Install]
+WantedBy=timers.target

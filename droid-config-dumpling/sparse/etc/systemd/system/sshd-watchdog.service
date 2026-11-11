@@ -1,0 +1,7 @@
+[Unit]
+Description=Recover an enabled but inactive sshd.socket
+After=sshd.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/dumpling-sshd-watchdog

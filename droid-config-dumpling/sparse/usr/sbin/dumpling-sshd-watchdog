@@ -1,0 +1,33 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Recover an enabled socket without interrupting an active SSH server.
+
+set -eu
+
+socket_state=$(systemctl show --property=ActiveState --value sshd.socket)
+case "$socket_state" in
+    active|activating|deactivating) exit 0 ;;
+    inactive|failed) ;;
+    *) exit 1 ;;
+esac
+
+service_state=$(systemctl show --property=ActiveState --value sshd.service)
+case "$service_state" in
+    inactive|failed) ;;
+    *) exit 0 ;;
+esac
+
+enabled=$(systemctl is-enabled sshd.socket 2>/dev/null) || exit 0
+case "$enabled" in
+    enabled|enabled-runtime) ;;
+    *) exit 0 ;;
+esac
+
+# start is idempotent if another caller has already recovered the socket.
+# sshd.socket's ordering drop-in serializes any simultaneous listener handover.
+if systemctl start sshd.socket; then
+    logger -t dumpling-sshd-watchdog 'Started enabled sshd.socket'
+else
+    logger -t dumpling-sshd-watchdog 'Failed to start sshd.socket'
+    exit 1
+fi

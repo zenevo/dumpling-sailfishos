@@ -1,0 +1,8 @@
+[Unit]
+Description=Keep dumpling Qualcomm fast roaming disabled
+After=wpa_supplicant.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/dumpling-wifi-roam --ensure-disabled
+TimeoutStartSec=15
