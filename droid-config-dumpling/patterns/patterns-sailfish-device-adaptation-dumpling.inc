@@ -18,8 +18,10 @@ Requires: libhybris-libEGL
 Requires: libhybris-libGLESv2
 Requires: libhybris-libwayland-egl
 
-# Telephony (Android 9 binder RIL)
-Requires: ofono-ril-binder-plugin
+# Telephony (Android 9 HIDL RIL + Qualcomm IMS)
+Requires: ofono-binder-plugin
+Requires: ofono-binder-plugin-ext-qti
+Requires: libofonobinderpluginext
 
 # Cellular data
 Requires: dummy_netd
